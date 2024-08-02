@@ -1,13 +1,15 @@
 import react from "react";
 import { TileData } from "../new-types";
 import { GameMapTiles } from "../new-types";
+import Tile from "./Tile";
 
-const GameMap = (props: GameMapTiles) => {
+const GameMap = ({ tiles }: { tiles: GameMapTiles }) => {
   return (
     <div className="somthing">
-      {props.map((idx, cou) => (
-        <div key={cou} />
+      {tiles.map((tile, key) => (
+        <Tile tile={tile} key={tile.number} />
       ))}
+      {console.log(tiles)}
     </div>
   );
 };

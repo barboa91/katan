@@ -1,15 +1,19 @@
 import Image from "next/image";
 
 import Tile from "../components/map/Tile";
-import { GameMapTiles, TileData } from "@/components/new-types";
-import GameMap from "../components/map/GameMap";
+import { TileData } from "@/components/new-types";
+import GameMap from "@/components/map/GameMap";
+import { GameMapTiles } from "@/components/new-types";
 
 export default function Home() {
-  const theMap: GameMapTiles = [{ resource: "wood", number: 3 }];
+  const normalGameMap: GameMapTiles = [
+    { resource: "wood", number: 2 },
+    { resource: "ore", number: 3 },
+  ];
+
   return (
     <main>
-      <div>Katan</div>
-      <GameMap props={theMap} />
+      <GameMap tiles={normalGameMap} />
     </main>
   );
 }
