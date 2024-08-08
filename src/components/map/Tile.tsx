@@ -11,13 +11,13 @@ let tileColor = function ({ tile }: { tile: TileData }): string {
     case "wood":
       return "green";
     case "ore":
-      return "black";
+      return "grey";
     case "wheat":
-      return "yellow";
+      return "wheat";
     case "brick":
       return "red";
     case "sheep":
-      return "white";
+      return "greenyellow";
     default:
       return "blue";
   }

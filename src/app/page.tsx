@@ -7,8 +7,24 @@ import { GameMapTiles } from "@/components/new-types";
 
 export default function Home() {
   const normalGameMap: GameMapTiles = [
-    { resource: "wood", number: 2 },
-    { resource: "ore", number: 3 },
+    { resource: "wood", number: 0 },
+    { resource: "wood", number: 0 },
+    { resource: "wood", number: 0 },
+    { resource: "wood", number: 0 },
+    { resource: "ore", number: 0 },
+    { resource: "ore", number: 0 },
+    { resource: "ore", number: 0 },
+    { resource: "sheep", number: 0 },
+    { resource: "sheep", number: 0 },
+    { resource: "sheep", number: 0 },
+    { resource: "sheep", number: 0 },
+    { resource: "brick", number: 0 },
+    { resource: "brick", number: 0 },
+    { resource: "brick", number: 0 },
+    { resource: "wheat", number: 0 },
+    { resource: "wheat", number: 0 },
+    { resource: "wheat", number: 0 },
+    { resource: "wheat", number: 0 },
   ];
 
   return (

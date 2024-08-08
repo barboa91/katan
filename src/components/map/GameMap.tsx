@@ -5,7 +5,7 @@ import Tile from "./Tile";
 
 const GameMap = ({ tiles }: { tiles: GameMapTiles }) => {
   return (
-    <div className="somthing">
+    <div className="theMap">
       {tiles.map((tile, key) => (
         <Tile tile={tile} key={tile.number} />
       ))}
