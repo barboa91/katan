@@ -1,26 +1,9 @@
 import { PlayerState } from "@/lib/game/state";
 import { BUILD_COSTS } from "@/lib/game/costs";
-import { Resource } from "@/lib/game/types";
+import { hasResources } from "@/lib/game/rules";
+import { formatResourceList } from "@/lib/constants";
 
 export type BuildMode = "road" | "settlement" | "city";
-
-const RESOURCE_ICONS: Record<Resource, string> = {
-  wood: "🪵",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-};
-
-function affordable(resources: Record<Resource, number>, cost: Partial<Record<Resource, number>>): boolean {
-  return Object.entries(cost).every(([resource, amount]) => resources[resource as Resource] >= (amount ?? 0));
-}
-
-function costLabel(cost: Partial<Record<Resource, number>>): string {
-  return Object.entries(cost)
-    .map(([resource, amount]) => `${RESOURCE_ICONS[resource as Resource]}${amount}`)
-    .join(" ");
-}
 
 const OPTIONS: { mode: BuildMode; label: string; piecesKey: "roadsLeft" | "settlementsLeft" | "citiesLeft" }[] = [
   { mode: "road", label: "Road", piecesKey: "roadsLeft" },
@@ -41,7 +24,7 @@ const BuildMenu = ({
     <div className="flex gap-3">
       {OPTIONS.map((opt) => {
         const piecesLeft = player[opt.piecesKey];
-        const canAfford = affordable(player.resources, BUILD_COSTS[opt.mode]);
+        const canAfford = hasResources(player, BUILD_COSTS[opt.mode]);
         const disabled = !canAfford || piecesLeft <= 0;
         const selected = mode === opt.mode;
         return (
@@ -55,7 +38,7 @@ const BuildMenu = ({
             }`}
           >
             <span className="font-medium">{opt.label}</span>
-            <span className="text-xs text-black/50">{costLabel(BUILD_COSTS[opt.mode])}</span>
+            <span className="text-xs text-black/50">{formatResourceList(BUILD_COSTS[opt.mode])}</span>
             <span className="text-xs text-black/40">{piecesLeft} left</span>
           </button>
         );

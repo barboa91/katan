@@ -18,6 +18,7 @@ import {
   canPlaceCity,
   publicVictoryPoints,
   totalVictoryPoints,
+  stealCandidates,
 } from "@/lib/game/rules";
 import { RoomSnapshot } from "@/lib/socketEvents";
 import GameMap from "@/components/map/GameMap";
@@ -262,18 +263,12 @@ export default function GamePage() {
     if (game!.phase === "main") setBuildMode(null);
   }
 
-  // Non-self players adjacent to `tileId` with at least one card — mirrors
-  // rules.ts's stealCandidates so the picker only ever offers legal victims.
+  // Thin wrapper so every call site below doesn't need to thread `game`/
+  // `playerId` through individually — the actual eligibility logic is
+  // rules.ts's stealCandidates itself (imported above), not reimplemented
+  // here.
   function stealCandidatesFor(tileId: string): string[] {
-    const ids = new Set<string>();
-    for (const vertex of Object.values(game!.board.vertices)) {
-      if (!vertex.building || vertex.building.playerId === playerId) continue;
-      if (!vertex.adjacentTileIds.includes(tileId)) continue;
-      const victim = game!.players.find((p) => p.playerId === vertex.building!.playerId);
-      const total = victim ? Object.values(victim.resources).reduce((sum, n) => sum + n, 0) : 0;
-      if (total > 0) ids.add(vertex.building.playerId);
-    }
-    return [...ids];
+    return stealCandidates(game!, playerId!, tileId);
   }
 
   function handleTileClick(tileId: string) {

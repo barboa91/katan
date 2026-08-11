@@ -8,21 +8,13 @@
 import { Board, BoardSize, Edge, EdgeId, HexTile, Port, PortResource, Resource, Vertex, VertexId } from "./types";
 import { axialDistance, axialToPixel, hexCorners } from "./hexMath";
 import { BOARD_TEMPLATES, PORT_COUNTS, boardSizeForPlayerCount } from "./boardTemplates";
+import { shuffle } from "./random";
 
 /** Corner coordinates are rounded to this many decimal places before being
  * used as a dedupe key, to absorb floating-point noise from trig functions
  * so that the "same" corner computed via different tiles produces an
  * identical key. */
 const CORNER_PRECISION = 1e4;
-
-function shuffle<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
 
 function vertexKey(x: number, y: number): VertexId {
   return `${Math.round(x * CORNER_PRECISION)}_${Math.round(y * CORNER_PRECISION)}`;

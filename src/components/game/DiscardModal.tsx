@@ -5,14 +5,8 @@
 
 import { useState } from "react";
 import { Resource } from "@/lib/game/types";
-
-const RESOURCE_ICONS: Record<Resource, string> = {
-  wood: "🪵",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-};
+import { emptyResources } from "@/lib/game/state";
+import { RESOURCE_ICONS } from "@/lib/constants";
 
 const DiscardModal = ({
   owed,
@@ -23,13 +17,7 @@ const DiscardModal = ({
   resources: Record<Resource, number>;
   onSubmit: (selection: Partial<Record<Resource, number>>) => void;
 }) => {
-  const [selection, setSelection] = useState<Record<Resource, number>>({
-    wood: 0,
-    brick: 0,
-    sheep: 0,
-    wheat: 0,
-    ore: 0,
-  });
+  const [selection, setSelection] = useState<Record<Resource, number>>(emptyResources());
 
   const selected = Object.values(selection).reduce((sum, n) => sum + n, 0);
 

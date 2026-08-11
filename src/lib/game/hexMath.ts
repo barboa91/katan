@@ -7,25 +7,6 @@
 
 import { Axial, Point } from "./types";
 
-/** The six axial neighbor directions, index-matched to hex corner sides. */
-export const AXIAL_DIRECTIONS: Axial[] = [
-  { q: 1, r: 0 },
-  { q: 1, r: -1 },
-  { q: 0, r: -1 },
-  { q: -1, r: 0 },
-  { q: -1, r: 1 },
-  { q: 0, r: 1 },
-];
-
-export function axialNeighbor(coord: Axial, direction: number): Axial {
-  const d = AXIAL_DIRECTIONS[((direction % 6) + 6) % 6];
-  return { q: coord.q + d.q, r: coord.r + d.r };
-}
-
-export function axialToKey(coord: Axial): string {
-  return `${coord.q},${coord.r}`;
-}
-
 /** Cube-coordinate distance between two axial hexes. */
 export function axialDistance(a: Axial, b: Axial): number {
   const aq = a.q, ar = a.r, as = -a.q - a.r;
@@ -57,6 +38,14 @@ export function hexCorner(center: Point, size: number, i: number): Point {
 
 export function hexCorners(center: Point, size: number): Point[] {
   return [0, 1, 2, 3, 4, 5].map((i) => hexCorner(center, size, i));
+}
+
+/** Bounding box of a pointy-top hex at the given size — the shared source
+ * for the `sqrt(3)*size` width / `2*size` height ratio that both Tile.tsx
+ * and GameMap.tsx need (that exact ratio is what makes the clip-path
+ * polygon render as a true hexagon and tile edge-to-edge with no gaps). */
+export function hexDimensions(size: number): { width: number; height: number } {
+  return { width: Math.sqrt(3) * size, height: 2 * size };
 }
 
 /** Board vertex/edge coordinates are stored at hexSize=1 (see boardGen.ts);

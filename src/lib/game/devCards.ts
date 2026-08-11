@@ -9,6 +9,7 @@
 //   Victory Point cards. Total 34: 20/5/3/3/3.
 
 import { BoardSize, DevCardType, Resource } from "./types";
+import { shuffle } from "./random";
 
 export const DEV_CARD_COUNTS: Record<BoardSize, Record<DevCardType, number>> = {
   standard: { knight: 14, victoryPoint: 5, roadBuilding: 2, yearOfPlenty: 2, monopoly: 2 },
@@ -16,15 +17,6 @@ export const DEV_CARD_COUNTS: Record<BoardSize, Record<DevCardType, number>> = {
 };
 
 export const DEV_CARD_COST: Partial<Record<Resource, number>> = { wheat: 1, sheep: 1, ore: 1 };
-
-function shuffle<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
 
 export function createDevDeck(size: BoardSize): DevCardType[] {
   const counts = DEV_CARD_COUNTS[size];

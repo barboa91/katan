@@ -8,7 +8,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Board } from "@/lib/game/types";
-import { axialToPixel, scalePoint } from "@/lib/game/hexMath";
+import { axialToPixel, hexDimensions, scalePoint } from "@/lib/game/hexMath";
 import Tile from "./Tile";
 import VertexSpot from "./VertexSpot";
 import EdgeSpot from "./EdgeSpot";
@@ -52,8 +52,7 @@ const GameMap = ({
    * nothing (fine for spectator/lobby-preview renders with no local player). */
   ownPortVertexIds?: Set<string>;
 }) => {
-  const width = Math.sqrt(3) * hexSize;
-  const height = 2 * hexSize;
+  const { width, height } = hexDimensions(hexSize);
 
   const tilePositions = board.tiles.map((tile) => ({ tile, center: axialToPixel(tile.coord, hexSize) }));
 

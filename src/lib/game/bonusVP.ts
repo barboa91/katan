@@ -68,60 +68,70 @@ function nicknameOf(state: GameState, playerId: string): string {
   return state.players.find((p) => p.playerId === playerId)?.nickname ?? "Someone";
 }
 
-/** Re-evaluates every player's road length and decides who (if anyone)
- * holds Longest Road, applying the "must strictly beat the current holder
- * to take it over" rule — a tie leaves it with whoever already has it,
- * and it can also be lost outright if an opponent's new settlement breaks
- * the holder's chain below the minimum. Call after any action that adds a
- * road or a building (buildRoad, buildSettlement, playRoadBuilding). */
-export function recomputeLongestRoad(state: GameState): GameState {
-  const currentHolderId = state.longestRoad;
-  const currentLength = currentHolderId ? longestRoadLength(state.board, currentHolderId) : 0;
+/** Shared "must strictly beat the current holder to take it over" overtake
+ * rule behind both Longest Road and Largest Army — they're otherwise
+ * identical algorithms (read the current holder's metric, require a
+ * strictly higher challenger to switch holders, drop the bonus outright if
+ * the holder falls below the qualifying threshold), differing only in
+ * which per-player number they're comparing and how that number gets
+ * described in the log line. */
+function recomputeBonus(
+  state: GameState,
+  field: "longestRoad" | "largestArmy",
+  threshold: number,
+  metricFor: (playerId: string) => number,
+  bonusName: string,
+  describe: (metric: number) => string
+): GameState {
+  const currentHolderId = state[field];
+  const currentMetric = currentHolderId ? metricFor(currentHolderId) : 0;
 
-  let bestId = currentHolderId && currentLength >= LONGEST_ROAD_MIN_LENGTH ? currentHolderId : null;
-  let bestLength = bestId ? currentLength : 0;
+  let bestId = currentHolderId && currentMetric >= threshold ? currentHolderId : null;
+  let bestMetric = bestId ? currentMetric : 0;
 
   for (const p of state.players) {
     if (p.playerId === currentHolderId) continue;
-    const length = longestRoadLength(state.board, p.playerId);
-    if (length < LONGEST_ROAD_MIN_LENGTH) continue;
-    if (length > bestLength) {
+    const metric = metricFor(p.playerId);
+    if (metric < threshold) continue;
+    if (metric > bestMetric) {
       bestId = p.playerId;
-      bestLength = length;
+      bestMetric = metric;
     }
   }
 
-  if (bestId === state.longestRoad) return state;
+  if (bestId === state[field]) return state;
   const log =
     bestId !== null
-      ? [...state.log, `${nicknameOf(state, bestId)} took Longest Road (${bestLength} roads, +2 VP)!`]
+      ? [...state.log, `${nicknameOf(state, bestId)} took ${bonusName} (${describe(bestMetric)}, +2 VP)!`]
       : state.log;
-  return { ...state, longestRoad: bestId, log };
+  return { ...state, [field]: bestId, log };
+}
+
+/** Re-evaluates every player's road length and decides who (if anyone)
+ * holds Longest Road — it can be lost outright if an opponent's new
+ * settlement breaks the holder's chain below the minimum. Call after any
+ * action that adds a road or a building (buildRoad, buildSettlement,
+ * playRoadBuilding). */
+export function recomputeLongestRoad(state: GameState): GameState {
+  return recomputeBonus(
+    state,
+    "longestRoad",
+    LONGEST_ROAD_MIN_LENGTH,
+    (playerId) => longestRoadLength(state.board, playerId),
+    "Longest Road",
+    (length) => `${length} roads`
+  );
 }
 
 /** Same overtake rule as Longest Road, applied to knightsPlayed instead of
  * road length. Call after playKnight increments the player's count. */
 export function recomputeLargestArmy(state: GameState): GameState {
-  const currentHolderId = state.largestArmy;
-  const currentHolder = currentHolderId ? state.players.find((p) => p.playerId === currentHolderId) : undefined;
-  const currentCount = currentHolder?.knightsPlayed ?? 0;
-
-  let bestId = currentHolderId && currentCount >= LARGEST_ARMY_MIN_KNIGHTS ? currentHolderId : null;
-  let bestCount = bestId ? currentCount : 0;
-
-  for (const p of state.players) {
-    if (p.playerId === currentHolderId) continue;
-    if (p.knightsPlayed < LARGEST_ARMY_MIN_KNIGHTS) continue;
-    if (p.knightsPlayed > bestCount) {
-      bestId = p.playerId;
-      bestCount = p.knightsPlayed;
-    }
-  }
-
-  if (bestId === state.largestArmy) return state;
-  const log =
-    bestId !== null
-      ? [...state.log, `${nicknameOf(state, bestId)} took Largest Army (${bestCount} knights, +2 VP)!`]
-      : state.log;
-  return { ...state, largestArmy: bestId, log };
+  return recomputeBonus(
+    state,
+    "largestArmy",
+    LARGEST_ARMY_MIN_KNIGHTS,
+    (playerId) => state.players.find((p) => p.playerId === playerId)?.knightsPlayed ?? 0,
+    "Largest Army",
+    (count) => `${count} knights`
+  );
 }

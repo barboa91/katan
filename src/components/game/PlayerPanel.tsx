@@ -1,14 +1,7 @@
 import { PlayerState } from "@/lib/game/state";
 import { Resource } from "@/lib/game/types";
 import { WIN_VICTORY_POINTS } from "@/lib/game/rules";
-
-const RESOURCE_ICONS: Record<Resource, string> = {
-  wood: "🪵",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-};
+import { RESOURCE_ICONS } from "@/lib/constants";
 
 const PlayerPanel = ({
   player,

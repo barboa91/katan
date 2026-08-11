@@ -7,6 +7,7 @@ import { Board, DevCardType, Resource } from "./types";
 import { createBoard } from "./boardGen";
 import { boardSizeForPlayerCount } from "./boardTemplates";
 import { createDevDeck, emptyDevCardCounts } from "./devCards";
+import { shuffle } from "./random";
 
 export type PlayerState = {
   playerId: string;
@@ -117,17 +118,10 @@ export type GameState = {
 
 const PLAYER_COLORS = ["#c0392b", "#2d6cb5", "#e08e0b", "#2f7a3d", "#8146b0", "#8a5a2b"];
 
-function emptyResources(): Record<Resource, number> {
+/** The zero-resources starting hand — also the canonical shape for any UI
+ * that needs an empty resource selection (discard picker, trade proposer). */
+export function emptyResources(): Record<Resource, number> {
   return { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
-}
-
-function shuffle<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
 }
 
 export function createGameState(players: { playerId: string; nickname: string }[]): GameState {

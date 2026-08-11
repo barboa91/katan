@@ -8,6 +8,8 @@ import { useState } from "react";
 import { PlayerState } from "@/lib/game/state";
 import { DevCardType, Resource } from "@/lib/game/types";
 import { DEV_CARD_COST } from "@/lib/game/devCards";
+import { hasResources } from "@/lib/game/rules";
+import { RESOURCE_ICONS } from "@/lib/constants";
 
 const CARD_LABELS: Record<DevCardType, string> = {
   knight: "Knight",
@@ -23,18 +25,6 @@ const CARD_ICONS: Record<DevCardType, string> = {
   monopoly: "💰",
   victoryPoint: "⭐",
 };
-const RESOURCE_ICONS: Record<Resource, string> = {
-  wood: "🪵",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-};
-
-function affordable(resources: Record<Resource, number>): boolean {
-  return Object.entries(DEV_CARD_COST).every(([r, amount]) => resources[r as Resource] >= (amount ?? 0));
-}
-
 const DevCardPanel = ({
   player,
   devDeckCount,
@@ -95,7 +85,7 @@ const DevCardPanel = ({
       <div className="flex items-center gap-2">
         <button
           onClick={onBuy}
-          disabled={!affordable(player.resources) || devDeckCount === 0}
+          disabled={!hasResources(player, DEV_CARD_COST) || devDeckCount === 0}
           title={devDeckCount === 0 ? "Deck is empty" : "🌾 wheat, 🐑 sheep, ⛰️ ore"}
           className="rounded-md border border-black/20 px-3 py-1.5 text-sm font-medium transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
         >

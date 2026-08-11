@@ -5,6 +5,7 @@
 
 import React from "react";
 import { HexTile, Point } from "@/lib/game/types";
+import { hexDimensions } from "@/lib/game/hexMath";
 
 const RESOURCE_COLORS: Record<string, string> = {
   wood: "#2f7a3d",
@@ -37,12 +38,11 @@ const Tile = ({
   interactive?: boolean;
   onClick?: () => void;
 }) => {
-  // Pointy-top regular hexagon: width = sqrt(3)*size, height = 2*size.
-  // Using this exact ratio (rather than a square box) is what makes the
-  // clip-path polygon below render as a true hexagon instead of a
-  // squashed one, and lets adjacent tiles tile edge-to-edge with no gaps.
-  const width = Math.sqrt(3) * size;
-  const height = 2 * size;
+  // Using hexDimensions' exact width/height ratio (rather than a square
+  // box) is what makes the clip-path polygon below render as a true
+  // hexagon instead of a squashed one, and lets adjacent tiles tile
+  // edge-to-edge with no gaps.
+  const { width, height } = hexDimensions(size);
 
   return (
     <div

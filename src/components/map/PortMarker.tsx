@@ -3,15 +3,11 @@
 // between (GameMap computes that offset position — this only draws the dot).
 
 import { Point, PortResource } from "@/lib/game/types";
+import { RESOURCE_ICONS } from "@/lib/constants";
 
-const RESOURCE_ICONS: Record<string, string> = {
-  wood: "🪵",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-  any: "⚓",
-};
+// "any" isn't a real Resource (it's a generic 3:1 port), so it's layered
+// on top of the shared RESOURCE_ICONS map rather than living in it.
+const PORT_ICONS: Record<PortResource, string> = { ...RESOURCE_ICONS, any: "⚓" };
 
 const PortMarker = ({
   center,
@@ -39,7 +35,7 @@ const PortMarker = ({
         boxShadow: owned ? "0 0 0 2px #d97706" : "0 0 0 1px rgba(0,0,0,0.2)",
       }}
     >
-      <span>{RESOURCE_ICONS[resource]}</span>
+      <span>{PORT_ICONS[resource]}</span>
       <span className="text-black/60">{ratio}:1</span>
     </div>
   );

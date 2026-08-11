@@ -4,7 +4,7 @@
 // treated as in-scope by necessity (see the plan's open questions).
 
 import { GameState } from "./state";
-import { canPlaceSettlement } from "./rules";
+import { canPlaceSettlement, buildRoad, buildSettlement, buildCity } from "./rules";
 import { Resource } from "./types";
 
 export function placeSetupSettlement(state: GameState, playerId: string, vertexId: string): GameState {
@@ -102,4 +102,28 @@ export function placeSetupRoad(state: GameState, playerId: string, edgeId: strin
     players,
     setup: { ...setup, index: nextIndex, subphase: "placeSettlement", pendingSettlementVertexId: null },
   };
+}
+
+/** Single dispatch point for the wire-level "build" action (server/index.ts's
+ * game:build handler): setup-phase placement routes to placeSetupSettlement/
+ * placeSetupRoad (with "cities can't be built during setup" as a genuine
+ * game rule, not a transport-layer special case — this is why that check
+ * lives here rather than in server/index.ts), main-phase building routes to
+ * the normal buildRoad/buildSettlement/buildCity. Each of those already
+ * validates everything else (turn, legality, cost); this only decides which
+ * one applies given the current phase and requested piece type. */
+export function applyBuildAction(
+  state: GameState,
+  playerId: string,
+  type: "settlement" | "road" | "city",
+  targetId: string
+): GameState {
+  if (state.phase === "setup") {
+    if (type === "settlement") return placeSetupSettlement(state, playerId, targetId);
+    if (type === "road") return placeSetupRoad(state, playerId, targetId);
+    throw new Error("Cities can't be built during setup");
+  }
+  if (type === "road") return buildRoad(state, playerId, targetId);
+  if (type === "settlement") return buildSettlement(state, playerId, targetId);
+  return buildCity(state, playerId, targetId);
 }

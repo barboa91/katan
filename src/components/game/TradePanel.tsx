@@ -5,25 +5,14 @@
 // you pick who to actually swap with" flow — see tradeRules.ts.
 
 import { useState } from "react";
-import { GameState, TradeOffer } from "@/lib/game/state";
+import { GameState, TradeOffer, emptyResources } from "@/lib/game/state";
 import { Resource } from "@/lib/game/types";
+import { RESOURCE_ICONS, formatResourceList } from "@/lib/constants";
 
-const RESOURCE_ICONS: Record<Resource, string> = {
-  wood: "🪵",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-};
 const RESOURCES = Object.keys(RESOURCE_ICONS) as Resource[];
 
-function resourceSummary(resources: Partial<Record<Resource, number>>): string {
-  return (
-    Object.entries(resources)
-      .filter(([, n]) => (n ?? 0) > 0)
-      .map(([r, n]) => `${RESOURCE_ICONS[r as Resource]}${n}`)
-      .join(" ") || "—"
-  );
+function nicknameOf(players: GameState["players"], playerId: string): string {
+  return players.find((p) => p.playerId === playerId)?.nickname ?? "Someone";
 }
 
 function ResourceStepper({
@@ -69,7 +58,78 @@ function ResourceStepper({
   );
 }
 
-const EMPTY: Record<Resource, number> = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+// Hoisted to module scope (not defined inside TradePanel) so its component
+// identity is stable across renders — TradePanel re-renders on every
+// game:state broadcast (any player's action, not just trade-related ones),
+// and a component redeclared inside a render function gets a fresh identity
+// every time, forcing React to tear down and remount every trade row's DOM
+// instead of diffing it.
+function TradeRow({
+  trade,
+  mine,
+  playerId,
+  players,
+  onConfirm,
+  onCancel,
+  onRespond,
+}: {
+  trade: TradeOffer;
+  mine: boolean;
+  playerId: string;
+  players: GameState["players"];
+  onConfirm: (tradeId: string, counterpartyId: string) => void;
+  onCancel: (tradeId: string) => void;
+  onRespond: (tradeId: string, response: "accepted" | "rejected") => void;
+}) {
+  const myResponse = trade.respondedBy[playerId];
+  const accepters = Object.entries(trade.respondedBy).filter(([, r]) => r === "accepted").map(([pid]) => pid);
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-black/20 px-3 py-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span>
+          {mine ? "You" : nicknameOf(players, trade.proposerId)} offer {formatResourceList(trade.offering, "—")} for{" "}
+          {formatResourceList(trade.requesting, "—")}
+          {trade.targetPlayerId && ` (to ${nicknameOf(players, trade.targetPlayerId)})`}
+        </span>
+      </div>
+      {mine ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {accepters.length === 0 && <span className="text-black/40">Waiting for a response…</span>}
+          {accepters.map((pid) => (
+            <button
+              key={pid}
+              onClick={() => onConfirm(trade.id, pid)}
+              className="rounded border border-green-600 px-2 py-0.5 text-green-700 hover:bg-green-50"
+            >
+              Confirm with {nicknameOf(players, pid)}
+            </button>
+          ))}
+          <button onClick={() => onCancel(trade.id)} className="text-black/40 underline">
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onRespond(trade.id, "accepted")}
+            disabled={myResponse === "accepted"}
+            className="rounded border border-green-600 px-2 py-0.5 text-green-700 disabled:opacity-40"
+          >
+            Accept
+          </button>
+          <button
+            onClick={() => onRespond(trade.id, "rejected")}
+            disabled={myResponse === "rejected"}
+            className="rounded border border-red-600 px-2 py-0.5 text-red-700 disabled:opacity-40"
+          >
+            Reject
+          </button>
+          {myResponse && <span className="text-black/40">You {myResponse}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const TradePanel = ({
   game,
@@ -93,8 +153,8 @@ const TradePanel = ({
   onCancel: (tradeId: string) => void;
 }) => {
   const [open, setOpen] = useState(false);
-  const [offering, setOffering] = useState<Record<Resource, number>>(EMPTY);
-  const [requesting, setRequesting] = useState<Record<Resource, number>>(EMPTY);
+  const [offering, setOffering] = useState<Record<Resource, number>>(emptyResources());
+  const [requesting, setRequesting] = useState<Record<Resource, number>>(emptyResources());
   const [target, setTarget] = useState<string>("");
 
   const self = game.players.find((p) => p.playerId === playerId)!;
@@ -109,69 +169,14 @@ const TradePanel = ({
     const offeringPayload = Object.fromEntries(Object.entries(offering).filter(([, n]) => n > 0));
     const requestingPayload = Object.fromEntries(Object.entries(requesting).filter(([, n]) => n > 0));
     onPropose(offeringPayload, requestingPayload, target || null);
-    setOffering(EMPTY);
-    setRequesting(EMPTY);
+    setOffering(emptyResources());
+    setRequesting(emptyResources());
     setTarget("");
     setOpen(false);
   }
 
   const offeringTotal = Object.values(offering).reduce((a, b) => a + b, 0);
   const requestingTotal = Object.values(requesting).reduce((a, b) => a + b, 0);
-
-  function nicknameOf(pid: string) {
-    return game.players.find((p) => p.playerId === pid)?.nickname ?? "Someone";
-  }
-
-  function TradeRow({ trade, mine }: { trade: TradeOffer; mine: boolean }) {
-    const myResponse = trade.respondedBy[playerId];
-    const accepters = Object.entries(trade.respondedBy).filter(([, r]) => r === "accepted").map(([pid]) => pid);
-    return (
-      <div className="flex flex-col gap-1 rounded-md border border-black/20 px-3 py-2 text-xs">
-        <div className="flex items-center justify-between gap-2">
-          <span>
-            {mine ? "You" : nicknameOf(trade.proposerId)} offer {resourceSummary(trade.offering)} for{" "}
-            {resourceSummary(trade.requesting)}
-            {trade.targetPlayerId && ` (to ${nicknameOf(trade.targetPlayerId)})`}
-          </span>
-        </div>
-        {mine ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {accepters.length === 0 && <span className="text-black/40">Waiting for a response…</span>}
-            {accepters.map((pid) => (
-              <button
-                key={pid}
-                onClick={() => onConfirm(trade.id, pid)}
-                className="rounded border border-green-600 px-2 py-0.5 text-green-700 hover:bg-green-50"
-              >
-                Confirm with {nicknameOf(pid)}
-              </button>
-            ))}
-            <button onClick={() => onCancel(trade.id)} className="text-black/40 underline">
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onRespond(trade.id, "accepted")}
-              disabled={myResponse === "accepted"}
-              className="rounded border border-green-600 px-2 py-0.5 text-green-700 disabled:opacity-40"
-            >
-              Accept
-            </button>
-            <button
-              onClick={() => onRespond(trade.id, "rejected")}
-              disabled={myResponse === "rejected"}
-              className="rounded border border-red-600 px-2 py-0.5 text-red-700 disabled:opacity-40"
-            >
-              Reject
-            </button>
-            {myResponse && <span className="text-black/40">You {myResponse}</span>}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-2">
@@ -219,10 +224,10 @@ const TradePanel = ({
       {(myTrades.length > 0 || incoming.length > 0) && (
         <div className="flex w-full flex-col gap-2">
           {myTrades.map((t) => (
-            <TradeRow key={t.id} trade={t} mine />
+            <TradeRow key={t.id} trade={t} mine playerId={playerId} players={game.players} onConfirm={onConfirm} onCancel={onCancel} onRespond={onRespond} />
           ))}
           {incoming.map((t) => (
-            <TradeRow key={t.id} trade={t} mine={false} />
+            <TradeRow key={t.id} trade={t} mine={false} playerId={playerId} players={game.players} onConfirm={onConfirm} onCancel={onCancel} onRespond={onRespond} />
           ))}
         </div>
       )}

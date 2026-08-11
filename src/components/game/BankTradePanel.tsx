@@ -8,14 +8,8 @@ import { useState } from "react";
 import { GameState } from "@/lib/game/state";
 import { Resource } from "@/lib/game/types";
 import { getBestRatio } from "@/lib/game/tradeRules";
+import { RESOURCE_ICONS } from "@/lib/constants";
 
-const RESOURCE_ICONS: Record<Resource, string> = {
-  wood: "🪵",
-  brick: "🧱",
-  sheep: "🐑",
-  wheat: "🌾",
-  ore: "⛰️",
-};
 const RESOURCES = Object.keys(RESOURCE_ICONS) as Resource[];
 
 const BankTradePanel = ({
