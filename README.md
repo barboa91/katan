@@ -20,6 +20,26 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
 
+## Running with Docker
+
+For a self-hosted deployment (see `Dockerfile.web`, `Dockerfile.socket`,
+`nginx/default.conf`), the whole stack — the Next.js app, the Socket.IO
+server, and an nginx reverse proxy that puts both behind a single origin —
+runs via Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+The app is then reachable at `http://localhost` (nginx forwards `/` to the
+Next.js app and `/socket.io/` to the Socket.IO server — the browser never
+talks to either container directly). Two settings are overridable via a
+`.env` file (copy `.env.example`) instead of editing `docker-compose.yml`:
+`HTTP_PORT` (which host port nginx binds to, default 80) and
+`CLIENT_ORIGIN` (the origin the Socket.IO server accepts connections from —
+set this to your real public URL once actually deployed; a real
+domain/TLS setup is a deploy-time decision this repo doesn't make for you).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -1,0 +1,34 @@
+# Multi-stage build for the Next.js frontend. Produces a minimal runtime
+# image via Next's "standalone" output (see next.config.mjs) — the final
+# stage needs no node_modules at all, just the traced server + static assets.
+
+# ---- deps: install once, reused by the builder stage's cache layer ----
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# ---- builder: full source + a real `next build` ----
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# Same-origin Socket.IO connection through nginx in production (see
+# src/context/SocketContext.tsx) — NEXT_PUBLIC_* vars are inlined into the
+# client bundle at build time, not read at container runtime, so this has
+# to be a build ARG rather than a docker-compose environment: entry.
+ARG NEXT_PUBLIC_SOCKET_URL=""
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
+RUN npm run build
+
+# ---- runner: just the standalone server + static assets ----
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/public ./public
+# .next/standalone already includes a minimal server.js entrypoint plus
+# only the node_modules files it actually traced as needed.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+EXPOSE 3000
+CMD ["node", "server.js"]

@@ -1,0 +1,24 @@
+# Socket.IO server image. Runs server/index.ts directly via tsx — the same
+# runtime `npm run server:dev` (tsx watch) already uses, so there's no
+# second build/run mode invented just for Docker. Only server/ and src/lib/
+# are copied in: the socket server's whole import chain (server/index.ts ->
+# src/lib/game/*, src/lib/socketEvents.ts) uses relative imports, never the
+# "@/" alias src/app|components|context need, so nothing under those three
+# directories is required here.
+#
+# `npm ci` here (not --omit=dev) installs the full dependency list, which
+# unavoidably includes next/react/react-dom too — this is one flat
+# package.json, not a workspace split per service, so there's no leaner
+# install available without restructuring the package. A known, deliberate
+# simplification (this project already accepts several — in-memory-only
+# state, no accounts — for the same "small self-hosted MVP" reason), not
+# an oversight.
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
+COPY server ./server
+COPY src/lib ./src/lib
+ENV NODE_ENV=production
+EXPOSE 4000
+CMD ["npx", "tsx", "server/index.ts"]

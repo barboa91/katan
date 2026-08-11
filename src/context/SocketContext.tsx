@@ -12,10 +12,17 @@ import { ClientToServerEvents, ServerToClientEvents } from "@/lib/socketEvents";
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-// In production (self-hosted, Phase 6) this should be same-origin with
-// nginx proxying the /socket.io path, so NEXT_PUBLIC_SOCKET_URL should be
-// left unset there. The explicit :4000 default only matters for local dev,
-// where the Socket.IO server runs as a separate process/port.
+// In production (self-hosted, Docker/nginx) this is same-origin — nginx
+// proxies the /socket.io path to the socket container (see
+// nginx/default.conf) — so Dockerfile.web's build always sets
+// NEXT_PUBLIC_SOCKET_URL to "" explicitly. The `|| undefined` below is
+// what actually makes that mean same-origin: socket.io-client's io()
+// connects same-origin only when given no URL at all (undefined), not an
+// empty string, and NEXT_PUBLIC_* vars are inlined at Next.js build time
+// so this can't be a runtime container env var. The :4000 fallback only
+// matters for local `npm run dev`, where NEXT_PUBLIC_SOCKET_URL is unset
+// entirely (`??`, not `||`, so that case is untouched) and the Socket.IO
+// server runs as a separate process/port.
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
 
 const SocketContext = createContext<{ socket: AppSocket; connected: boolean } | null>(null);
@@ -25,7 +32,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [connected, setConnected] = useState(false);
 
   if (!socketRef.current) {
-    socketRef.current = io(SOCKET_URL);
+    socketRef.current = io(SOCKET_URL || undefined);
   }
 
   useEffect(() => {
