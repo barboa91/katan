@@ -20,6 +20,7 @@ import {
   stealCandidates,
   publicVictoryPoints,
   totalVictoryPoints,
+  passSpecialBuildingTurn,
 } from "../src/lib/game/rules";
 import { placeSetupSettlement, placeSetupRoad } from "../src/lib/game/setup";
 import { Board, Resource } from "../src/lib/game/types";
@@ -27,6 +28,7 @@ import { longestRoadLength, recomputeLongestRoad } from "../src/lib/game/bonusVP
 import { emptyDevCardCounts } from "../src/lib/game/devCards";
 import { buyDevCard, playKnight, playRoadBuilding, playYearOfPlenty, playMonopoly } from "../src/lib/game/devCardRules";
 import { getBestRatio, bankTrade, proposeTrade, respondTrade, confirmTrade, cancelTrade } from "../src/lib/game/tradeRules";
+import { usesSpecialBuildingPhase } from "../src/lib/game/boardTemplates";
 
 function fail(message: string): never {
   console.error(`FAIL: ${message}`);
@@ -1067,5 +1069,176 @@ try {
   }
   console.log('Post-game actions correctly rejected with "already ended". OK');
 }
+
+// --- Special Building Phase (5-6 player games only) ---
+console.log("\nTesting the Special Building Phase (5-6 player games).");
+
+if (usesSpecialBuildingPhase(4)) fail("usesSpecialBuildingPhase(4) should be false");
+if (!usesSpecialBuildingPhase(5)) fail("usesSpecialBuildingPhase(5) should be true");
+if (!usesSpecialBuildingPhase(6)) fail("usesSpecialBuildingPhase(6) should be true");
+console.log("usesSpecialBuildingPhase: correct 4p/5p/6p boundary. OK");
+
+const sixPlayers = [
+  { playerId: "sb1", nickname: "P1" },
+  { playerId: "sb2", nickname: "P2" },
+  { playerId: "sb3", nickname: "P3" },
+  { playerId: "sb4", nickname: "P4" },
+  { playerId: "sb5", nickname: "P5" },
+  { playerId: "sb6", nickname: "P6" },
+];
+let sbState: GameState = createGameState(sixPlayers);
+// Bypass setup entirely (same approach the earlier sections use) — boost
+// straight to a main-phase state with every player able to afford
+// anything, and trigger advanceTurn from a MIDDLE turn-order index (not 0
+// or the last) so the slice/concat wrap in advanceTurn's queue
+// construction is actually under test, not just the non-wrapping case.
+sbState = {
+  ...sbState,
+  phase: "main",
+  setup: null,
+  turnSubphase: "postRoll",
+  currentPlayerIndex: 3,
+  players: sbState.players.map((p) => ({ ...p, resources: { wood: 10, brick: 10, sheep: 10, wheat: 10, ore: 10 } })),
+};
+const sbActiveId = sbState.turnOrder[3];
+const expectedQueue = [...sbState.turnOrder.slice(4), ...sbState.turnOrder.slice(0, 3)];
+
+sbState = advanceTurn(sbState, sbActiveId);
+if (!sbState.specialBuilding) fail("advanceTurn should start a Special Building Phase in a 6-player game");
+if (sbState.currentPlayerIndex !== 3) fail("currentPlayerIndex should stay put while the Special Building Phase is running");
+if (JSON.stringify(sbState.specialBuilding) !== JSON.stringify(expectedQueue)) {
+  fail(`expected Special Building queue ${JSON.stringify(expectedQueue)}, got ${JSON.stringify(sbState.specialBuilding)}`);
+}
+if (sbState.specialBuilding!.includes(sbActiveId)) {
+  fail("the active player who just ended their turn shouldn't be in their own Special Building queue");
+}
+console.log("advanceTurn (6p, mid-order index): correct wrapping queue, currentPlayerIndex unchanged. OK");
+
+// The resting active player is blocked from every non-build action while
+// their own Special Building Phase runs — including ending their turn
+// again, rolling, trading, and playing a dev card.
+try {
+  applyDiceRoll(sbState, sbActiveId);
+  fail("applyDiceRoll should be rejected while the Special Building Phase is running");
+} catch (e) {
+  if (!(e instanceof Error) || !/Special Building/i.test(e.message)) fail(`expected a Special Building rejection, got: ${e}`);
+  console.log("applyDiceRoll correctly rejected during the Special Building Phase. OK");
+}
+try {
+  bankTrade(sbState, sbActiveId, "wood", 4, "brick");
+  fail("bankTrade should be rejected while the Special Building Phase is running");
+} catch (e) {
+  if (!(e instanceof Error) || !/Special Building/i.test(e.message)) fail(`expected a Special Building rejection, got: ${e}`);
+  console.log("bankTrade correctly rejected during the Special Building Phase. OK");
+}
+try {
+  playKnight(sbState, sbActiveId, sbState.board.tiles[0].id);
+  fail("playKnight should be rejected while the Special Building Phase is running");
+} catch (e) {
+  if (!(e instanceof Error) || !/Special Building/i.test(e.message)) fail(`expected a Special Building rejection, got: ${e}`);
+  console.log("playKnight correctly rejected during the Special Building Phase. OK");
+}
+try {
+  advanceTurn(sbState, sbActiveId);
+  fail("advanceTurn should be rejected for the resting active player during their own Special Building Phase");
+} catch (e) {
+  if (!(e instanceof Error) || !/Special Building/i.test(e.message)) fail(`expected a Special Building rejection, got: ${e}`);
+  console.log("advanceTurn correctly rejected for the resting active player during their own Special Building Phase. OK");
+}
+
+// A queued player who isn't at the head of the queue can't build either.
+const nonHeadId = sbState.specialBuilding![1];
+const anyEdgeId = Object.keys(sbState.board.edges)[0];
+try {
+  buildRoad(sbState, nonHeadId, anyEdgeId);
+  fail("buildRoad should reject a queued player who isn't at the head of the Special Building queue");
+} catch (e) {
+  if (!(e instanceof Error) || !/Special Building/i.test(e.message)) fail(`expected a Special Building rejection, got: ${e}`);
+  console.log("buildRoad correctly rejected a non-head queued player. OK");
+}
+
+// The head of the queue CAN build and buy. Nobody has any buildings yet
+// (setup was bypassed), so buildRoad's connectivity check would otherwise
+// have nothing legal to attach to — hand-place one settlement directly
+// (same "craft the board directly" approach the Longest Road tests use)
+// so there's a real legal road spot to exercise.
+const headId = sbState.specialBuilding![0];
+const anchorVertexId = Object.keys(sbState.board.vertices)[0];
+sbState = {
+  ...sbState,
+  board: {
+    ...sbState.board,
+    vertices: {
+      ...sbState.board.vertices,
+      [anchorVertexId]: { ...sbState.board.vertices[anchorVertexId], building: { playerId: headId, type: "settlement" } },
+    },
+  },
+};
+const anchorEdge = Object.values(sbState.board.edges).find((e) => e.endpoints.includes(anchorVertexId))!;
+const queueBeforeBuild = sbState.specialBuilding;
+
+sbState = buildRoad(sbState, headId, anchorEdge.id);
+if (sbState.board.edges[anchorEdge.id].road?.playerId !== headId) fail("buildRoad should succeed for the head of the Special Building queue");
+if (JSON.stringify(sbState.specialBuilding) !== JSON.stringify(queueBeforeBuild)) {
+  fail("a successful build during the Special Building Phase shouldn't itself advance the queue — only passSpecialBuildingTurn should");
+}
+console.log("buildRoad succeeded for the head-of-queue player (and didn't advance the queue on its own). OK");
+
+const headDevDeckBefore = sbState.devDeck.length;
+sbState = buyDevCard(sbState, headId);
+if (sbState.devDeck.length !== headDevDeckBefore - 1) fail("buyDevCard should succeed for the head of the Special Building queue");
+const headAfterBuy = sbState.players.find((p) => p.playerId === headId)!;
+if (Object.values(headAfterBuy.newDevCards).reduce((a, b) => a + b, 0) !== 1) {
+  fail("a dev card bought during a Special Building mini-turn should land in newDevCards, not be immediately playable");
+}
+console.log("buyDevCard succeeded for the head-of-queue player, correctly landing in newDevCards. OK");
+
+try {
+  passSpecialBuildingTurn(sbState, nonHeadId);
+  fail("passSpecialBuildingTurn should reject anyone but the current head of the queue");
+} catch {
+  console.log("passSpecialBuildingTurn correctly rejected a non-head player. OK");
+}
+
+// Hand off to the second player in the queue and have them buy a card too
+// — this player is NOT turnOrder[currentPlayerIndex + 1] (headId is), so
+// their purchase should stay pending through the eventual hand-off, unlike
+// headId's (see below).
+sbState = passSpecialBuildingTurn(sbState, headId);
+const secondBuyerId = sbState.specialBuilding![0];
+if (secondBuyerId !== sbState.turnOrder[5]) fail("expected the second Special Building turn to belong to turnOrder[5]");
+const secondDevDeckBefore = sbState.devDeck.length;
+sbState = buyDevCard(sbState, secondBuyerId);
+if (sbState.devDeck.length !== secondDevDeckBefore - 1) fail("buyDevCard should succeed for the second player's Special Building turn too");
+
+// Drain the rest of the queue.
+while (sbState.specialBuilding) {
+  sbState = passSpecialBuildingTurn(sbState, sbState.specialBuilding[0]);
+}
+if (sbState.currentPlayerIndex !== 4) fail(`expected currentPlayerIndex 4 (turnOrder[4] = headId) once the Special Building Phase completes, got ${sbState.currentPlayerIndex}`);
+if (sbState.turnOrder[sbState.currentPlayerIndex] !== headId) fail("expected the next real turn to belong to headId (the immediate next player in turn order)");
+if (sbState.turnSubphase !== "preRoll") fail('expected turnSubphase "preRoll" for the next real turn after the Special Building Phase');
+console.log("passSpecialBuildingTurn: draining the full queue hands off to the next real turn (currentPlayerIndex, turnSubphase, specialBuilding all correct). OK");
+
+// Dev card timing: headId IS the very next real-turn player, so their
+// Special-Building purchase should merge into playable devCards right as
+// their real turn begins — but secondBuyerId's purchase (a player whose
+// own real turn is still several turns away) should stay pending.
+const headAfterDrain = sbState.players.find((p) => p.playerId === headId)!;
+const headPlayable = Object.values(headAfterDrain.devCards).reduce((a, b) => a + b, 0);
+const headPending = Object.values(headAfterDrain.newDevCards).reduce((a, b) => a + b, 0);
+if (headPlayable !== 1 || headPending !== 0) {
+  fail("headId's dev card (bought during their own Special Building mini-turn) should merge into devCards once their real turn begins right after");
+}
+const secondBuyerAfterDrain = sbState.players.find((p) => p.playerId === secondBuyerId)!;
+if (Object.values(secondBuyerAfterDrain.newDevCards).reduce((a, b) => a + b, 0) !== 1) {
+  fail("a dev card bought during a non-adjacent player's Special Building mini-turn should stay pending until their own real turn eventually comes around");
+}
+console.log("Dev card timing across the Special Building Phase: the immediate-next player's purchase merges right in; everyone else's stays pending. OK");
+
+// Regression guard: the file's original 4-player `state` never triggers a
+// Special Building Phase at all.
+if (state.specialBuilding !== null) fail("a 4-player game should never set specialBuilding");
+console.log("Regression check: the 4-player game's specialBuilding stayed null throughout. OK");
 
 console.log("\nDEMO OK");

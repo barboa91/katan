@@ -17,6 +17,7 @@ import {
   buildCity,
   discard,
   moveRobber,
+  passSpecialBuildingTurn,
 } from "../src/lib/game/rules";
 import { buyDevCard, playKnight, playRoadBuilding, playYearOfPlenty, playMonopoly } from "../src/lib/game/devCardRules";
 import { bankTrade, proposeTrade, respondTrade, confirmTrade, cancelTrade } from "../src/lib/game/tradeRules";
@@ -270,6 +271,19 @@ io.on("connection", (socket) => {
     if (!identity || !room?.gameState) return;
     try {
       const next = advanceTurn(room.gameState, identity.playerId);
+      room.gameState = next;
+      broadcastGameState(room.code, next);
+    } catch (err) {
+      socket.emit("game:actionError", { message: (err as Error).message });
+    }
+  });
+
+  socket.on("game:passSpecialBuilding", () => {
+    const identity = socketIdentity.get(socket.id);
+    const room = identity && roomManager.getRoom(identity.roomCode);
+    if (!identity || !room?.gameState) return;
+    try {
+      const next = passSpecialBuildingTurn(room.gameState, identity.playerId);
       room.gameState = next;
       broadcastGameState(room.code, next);
     } catch (err) {

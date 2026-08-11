@@ -13,6 +13,7 @@ import {
   hasResources,
   subtractResources,
   assertMainPhaseTurn,
+  assertBuildOrBuyTurn,
   assertRobberResolved,
   applyWinCheck,
   applyRobberMove,
@@ -21,10 +22,11 @@ import {
 import { recomputeLargestArmy, recomputeLongestRoad } from "./bonusVP";
 
 /** Buying is allowed any time on your own turn (like building — doesn't
- * require having rolled first) but blocked while a 7's fallout is
- * unresolved, and unlimited per turn (only *playing* is capped at one). */
+ * require having rolled first), or during a 5-6 player Special Building
+ * Phase mini-turn (see assertBuildOrBuyTurn) — blocked while a 7's fallout
+ * is unresolved, and unlimited per turn (only *playing* is capped at one). */
 export function buyDevCard(state: GameState, playerId: string): GameState {
-  assertMainPhaseTurn(state, playerId);
+  assertBuildOrBuyTurn(state, playerId);
   assertRobberResolved(state);
   if (state.devDeck.length === 0) throw new Error("The development card deck is empty");
   const player = getPlayer(state, playerId);

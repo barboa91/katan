@@ -100,6 +100,17 @@ export type GameState = {
    * clears whatever's left here, same as the physical game where an
    * outstanding offer only makes sense during the proposer's own turn. */
   pendingTrades: TradeOffer[];
+  /** 5-6 player games only (see boardTemplates.ts's usesSpecialBuildingPhase
+   * — 4-player games never set this). `null` outside of a Special Building
+   * Phase. While non-null, the ordered queue of players still owed a
+   * build-only mini-turn after the active player (turnOrder[currentPlayerIndex])
+   * ended their real turn — specialBuilding[0] is whoever may currently
+   * build/buy a dev card (see rules.ts's assertBuildOrBuyTurn). Note
+   * currentPlayerIndex deliberately does NOT move while this is set — the
+   * player who triggered the phase is still "current" by index, but
+   * assertMainPhaseTurn blocks them (and everyone else) from every
+   * non-build action until the queue drains via passSpecialBuildingTurn. */
+  specialBuilding: string[] | null;
   /** Lightweight human-readable event feed, for the UI — not authoritative state. */
   log: string[];
 };
@@ -162,6 +173,7 @@ export function createGameState(players: { playerId: string; nickname: string }[
     longestRoad: null,
     winnerId: null,
     pendingTrades: [],
+    specialBuilding: null,
     log: [],
   };
 }

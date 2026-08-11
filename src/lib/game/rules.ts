@@ -9,6 +9,7 @@ import { DiceRoll, GameState, PlayerState } from "./state";
 import { BUILD_COSTS } from "./costs";
 import { emptyDevCardCounts } from "./devCards";
 import { recomputeLongestRoad } from "./bonusVP";
+import { usesSpecialBuildingPhase } from "./boardTemplates";
 
 export function rollTwoDice(): DiceRoll {
   const die1 = 1 + Math.floor(Math.random() * 6);
@@ -108,6 +109,28 @@ export function getPlayer(state: GameState, playerId: string): PlayerState {
 export function assertMainPhaseTurn(state: GameState, playerId: string) {
   if (state.phase === "ended") throw new Error("The game has already ended");
   if (state.phase !== "main") throw new Error("The game hasn't started yet");
+  // Rolling, trading, and playing a dev card are never legal for anyone —
+  // not even the resting active player who triggered it — while a 5-6
+  // player Special Building Phase is draining (see assertBuildOrBuyTurn,
+  // which is the separate, SBP-aware gate building/buying uses instead).
+  if (state.specialBuilding) throw new Error("The Special Building Phase is in progress");
+  if (state.turnOrder[state.currentPlayerIndex] !== playerId) throw new Error("It's not your turn");
+}
+
+/** Building and buying a dev card are allowed either on the active
+ * player's own normal turn, or — 5-6 player games only — during a
+ * Special Building Phase mini-turn by whichever player is currently at
+ * the head of state.specialBuilding. Every other turn-gated action (dice,
+ * trading, playing a dev card) stays normal-turn-only and uses
+ * assertMainPhaseTurn instead, which blocks those for everyone while a
+ * Special Building Phase is running. */
+export function assertBuildOrBuyTurn(state: GameState, playerId: string) {
+  if (state.phase === "ended") throw new Error("The game has already ended");
+  if (state.phase !== "main") throw new Error("The game hasn't started yet");
+  if (state.specialBuilding) {
+    if (state.specialBuilding[0] !== playerId) throw new Error("It's not your Special Building turn");
+    return;
+  }
   if (state.turnOrder[state.currentPlayerIndex] !== playerId) throw new Error("It's not your turn");
 }
 
@@ -323,15 +346,17 @@ export function assertRobberResolved(state: GameState) {
   if (state.turnSubphase === "moveRobber") throw new Error("Move the robber before building");
 }
 
-export function advanceTurn(state: GameState, playerId: string): GameState {
-  assertMainPhaseTurn(state, playerId);
-  if (state.turnSubphase !== "postRoll") throw new Error("Roll the dice before ending your turn");
-
+/** The actual hand-off to turnOrder[currentPlayerIndex + 1] — shared tail
+ * of advanceTurn (reached immediately in 4-player games) and
+ * passSpecialBuildingTurn (reached once a 5-6 player game's Special
+ * Building Phase queue fully drains). */
+function advanceToNextTurn(state: GameState): GameState {
   const nextIndex = (state.currentPlayerIndex + 1) % state.turnOrder.length;
   const nextPlayerId = state.turnOrder[nextIndex];
-  // Dev cards bought last turn become playable now that it's that player's
-  // turn again (official "can't play the turn you bought it" rule) —
-  // merge whatever's pending into the playable pile.
+  // Dev cards bought last turn (or during a Special Building Phase mini-
+  // turn) become playable now that it's that player's turn again (official
+  // "can't play the turn you bought it" rule) — merge whatever's pending
+  // into the playable pile.
   const players = state.players.map((p) => {
     if (p.playerId !== nextPlayerId) return p;
     const hasPending = Object.values(p.newDevCards).some((n) => n > 0);
@@ -350,10 +375,50 @@ export function advanceTurn(state: GameState, playerId: string): GameState {
     turnSubphase: "preRoll",
     lastRoll: null,
     devCardPlayedThisTurn: false,
+    specialBuilding: null,
     // Trade offers are turn-scoped (see state.ts's TradeOffer comment) —
     // whatever's still open when the turn ends is moot, not carried over.
     pendingTrades: [],
   };
+}
+
+export function advanceTurn(state: GameState, playerId: string): GameState {
+  assertMainPhaseTurn(state, playerId);
+  if (state.turnSubphase !== "postRoll") throw new Error("Roll the dice before ending your turn");
+
+  if (usesSpecialBuildingPhase(state.turnOrder.length)) {
+    // Official 5-6 player rule: don't hand off the turn yet. Every OTHER
+    // player gets one build-only mini-turn first, in turn order starting
+    // right after this player and wrapping around back to (but never
+    // including) this player again — see passSpecialBuildingTurn for how
+    // the queue drains and the real next turn eventually begins.
+    // currentPlayerIndex deliberately stays put here; turnSubphase stays
+    // "postRoll" too (nothing during the Special Building Phase can change
+    // it — see rules.ts's assertRobberResolved comment on buildRoad etc.).
+    const { currentPlayerIndex, turnOrder } = state;
+    const queue = [...turnOrder.slice(currentPlayerIndex + 1), ...turnOrder.slice(0, currentPlayerIndex)];
+    return { ...state, specialBuilding: queue, pendingTrades: [] };
+  }
+
+  return advanceToNextTurn(state);
+}
+
+/** A player at the head of the Special Building Phase queue declares
+ * they're done (no forced action — they may have built nothing, or spent
+ * everything they could afford) and steps aside for the next queued
+ * player. Once the queue empties, this hands off exactly like advanceTurn
+ * would once it reaches advanceToNextTurn — to turnOrder[currentPlayerIndex
+ * + 1], who gets a full normal turn next, NOT another Special Building
+ * mini-turn (they already had theirs as part of this same queue — that's
+ * the official rule, not a bug). */
+export function passSpecialBuildingTurn(state: GameState, playerId: string): GameState {
+  if (state.phase === "ended") throw new Error("The game has already ended");
+  if (!state.specialBuilding) throw new Error("There's no Special Building Phase in progress");
+  if (state.specialBuilding[0] !== playerId) throw new Error("It's not your Special Building turn");
+
+  const queue = state.specialBuilding.slice(1);
+  if (queue.length === 0) return advanceToNextTurn(state);
+  return { ...state, specialBuilding: queue };
 }
 
 export function hasResources(player: PlayerState, cost: Partial<Record<Resource, number>>): boolean {
@@ -390,7 +455,7 @@ export function addResources(
  * resources banked from earlier turns), so this deliberately doesn't
  * check turnSubphase the way applyDiceRoll/advanceTurn do. */
 export function buildRoad(state: GameState, playerId: string, edgeId: EdgeId): GameState {
-  assertMainPhaseTurn(state, playerId);
+  assertBuildOrBuyTurn(state, playerId);
   assertRobberResolved(state);
   const player = getPlayer(state, playerId);
   if (player.roadsLeft <= 0) throw new Error("You're out of roads");
@@ -416,7 +481,7 @@ export function buildRoad(state: GameState, playerId: string, edgeId: EdgeId): G
 }
 
 export function buildSettlement(state: GameState, playerId: string, vertexId: VertexId): GameState {
-  assertMainPhaseTurn(state, playerId);
+  assertBuildOrBuyTurn(state, playerId);
   assertRobberResolved(state);
   const player = getPlayer(state, playerId);
   if (player.settlementsLeft <= 0) throw new Error("You're out of settlements");
@@ -450,7 +515,7 @@ export function buildSettlement(state: GameState, playerId: string, vertexId: Ve
 }
 
 export function buildCity(state: GameState, playerId: string, vertexId: VertexId): GameState {
-  assertMainPhaseTurn(state, playerId);
+  assertBuildOrBuyTurn(state, playerId);
   assertRobberResolved(state);
   const player = getPlayer(state, playerId);
   if (player.citiesLeft <= 0) throw new Error("You're out of cities");

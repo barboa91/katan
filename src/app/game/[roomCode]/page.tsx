@@ -113,12 +113,17 @@ export default function GamePage() {
 
   // Deselect the build tool when a new turn starts, so an old selection
   // doesn't silently carry over next time it's this player's turn again.
+  // currentPlayerIndex alone isn't enough during a 5-6 player Special
+  // Building Phase — it deliberately doesn't move while the SBP queue
+  // drains (see state.ts's specialBuilding comment), so also reset
+  // whenever the head of that queue changes to a different player.
+  const specialBuildingActorId = game?.specialBuilding?.[0];
   useEffect(() => {
     setBuildMode(null);
     setKnightMode(false);
     setRoadBuildingMode(false);
     setRoadBuildingEdges([]);
-  }, [game?.currentPlayerIndex]);
+  }, [game?.currentPlayerIndex, specialBuildingActorId]);
 
   // Clear any in-progress robber targeting once it's resolved (subphase
   // moves on to "postRoll") — otherwise a stale victim picker could hang
@@ -161,9 +166,15 @@ export default function GamePage() {
   );
 
   const isSetup = game.phase === "setup" && game.setup;
+  // While a 5-6 player Special Building Phase is draining, nobody is
+  // having a "normal turn" — not even the resting active player who
+  // triggered it (see state.ts's specialBuilding comment) — so isMyTurn
+  // is forced false for everyone until it clears. isMySpecialBuildTurn
+  // covers the separate build-only mini-turn instead.
   const isMyTurn = isSetup
     ? game.setup!.order[game.setup!.index] === playerId
-    : game.turnOrder[game.currentPlayerIndex] === playerId;
+    : !game.specialBuilding && game.turnOrder[game.currentPlayerIndex] === playerId;
+  const isMySpecialBuildTurn = game.phase === "main" && game.specialBuilding !== null && game.specialBuilding[0] === playerId;
   const setupSubphase = isSetup ? game.setup!.subphase : null;
 
   // Building (and therefore the vertex/edge overlays) is disallowed while
@@ -178,12 +189,13 @@ export default function GamePage() {
   // (canPlaceSettlement/canBuildSettlement/canPlaceCity mirror exactly
   // what the server itself validates — this is a UX filter, not the
   // source of truth; the server re-checks everything regardless).
+  const canBuildNow = isMyTurn || isMySpecialBuildTurn;
   const vertexAction: "settlement" | "city" | null =
     isMyTurn && setupSubphase === "placeSettlement"
       ? "settlement"
-      : isMyTurn && buildAllowed && game.phase === "main" && buildMode === "settlement"
+      : canBuildNow && buildAllowed && game.phase === "main" && buildMode === "settlement"
         ? "settlement"
-        : isMyTurn && buildAllowed && game.phase === "main" && buildMode === "city"
+        : canBuildNow && buildAllowed && game.phase === "main" && buildMode === "city"
           ? "city"
           : null;
 
@@ -210,7 +222,7 @@ export default function GamePage() {
 
   const edgeActive =
     (isMyTurn && setupSubphase === "placeRoad") ||
-    (isMyTurn && buildAllowed && game.phase === "main" && buildMode === "road") ||
+    (canBuildNow && buildAllowed && game.phase === "main" && buildMode === "road") ||
     (isMyTurn && roadBuildingMode);
 
   const legalEdgeIds =
@@ -220,7 +232,7 @@ export default function GamePage() {
             .filter((e) => !e.road && e.endpoints.includes(game.setup!.pendingSettlementVertexId!))
             .map((e) => e.id)
         )
-      : isMyTurn && buildAllowed && game.phase === "main" && buildMode === "road"
+      : canBuildNow && buildAllowed && game.phase === "main" && buildMode === "road"
         ? new Set(Object.keys(game.board.edges).filter((eid) => canPlaceRoad(game.board, playerId, eid)))
         : isMyTurn && roadBuildingMode
           ? roadBuildingLegalEdges()
@@ -382,7 +394,10 @@ export default function GamePage() {
             player={p}
             vp={p.playerId === playerId ? totalVictoryPoints(game, p.playerId) : publicVictoryPoints(game, p.playerId)}
             isSelf={p.playerId === playerId}
-            isCurrent={game.phase === "main" && game.turnOrder[game.currentPlayerIndex] === p.playerId}
+            isCurrent={
+              game.phase === "main" &&
+              (game.specialBuilding ? game.specialBuilding[0] === p.playerId : game.turnOrder[game.currentPlayerIndex] === p.playerId)
+            }
             connected={connectionStatus[p.playerId] ?? true}
             hasLargestArmy={game.largestArmy === p.playerId}
             hasLongestRoad={game.longestRoad === p.playerId}
@@ -390,35 +405,47 @@ export default function GamePage() {
         ))}
       </div>
 
-      {game.phase === "main" && isMyTurn && self && buildAllowed && (
+      {game.phase === "main" && (isMyTurn || isMySpecialBuildTurn) && self && buildAllowed && (
         <div className="flex flex-col items-center gap-3">
-          <DiceRoller
-            lastRoll={game.lastRoll}
-            canRoll={game.turnSubphase === "preRoll"}
-            canEndTurn={game.turnSubphase === "postRoll"}
-            onRoll={() => socket.emit("game:rollDice")}
-            onEndTurn={() => socket.emit("game:endTurn")}
-          />
+          {isMyTurn && (
+            <DiceRoller
+              lastRoll={game.lastRoll}
+              canRoll={game.turnSubphase === "preRoll"}
+              canEndTurn={game.turnSubphase === "postRoll"}
+              onRoll={() => socket.emit("game:rollDice")}
+              onEndTurn={() => socket.emit("game:endTurn")}
+            />
+          )}
           <BuildMenu player={self} mode={buildMode} onSelect={setBuildMode} />
           <DevCardPanel
             player={self}
             devDeckCount={game.devDeck.length}
-            canPlay={!game.devCardPlayedThisTurn && !knightMode && !roadBuildingMode}
+            canPlay={isMyTurn && !game.devCardPlayedThisTurn && !knightMode && !roadBuildingMode}
             onBuy={() => socket.emit("game:buyDevCard")}
             onStartKnight={() => setKnightMode(true)}
             onStartRoadBuilding={() => setRoadBuildingMode(true)}
             onPlayYearOfPlenty={(resources) => socket.emit("game:playDevCard", { type: "yearOfPlenty", resources })}
             onPlayMonopoly={(resource) => socket.emit("game:playDevCard", { type: "monopoly", resource })}
           />
-          <BankTradePanel
-            game={game}
-            playerId={playerId}
-            onTrade={(give, giveAmount, receive) => socket.emit("game:bankTrade", { give, giveAmount, receive })}
-          />
+          {isMyTurn && (
+            <BankTradePanel
+              game={game}
+              playerId={playerId}
+              onTrade={(give, giveAmount, receive) => socket.emit("game:bankTrade", { give, giveAmount, receive })}
+            />
+          )}
+          {isMySpecialBuildTurn && (
+            <button
+              onClick={() => socket.emit("game:passSpecialBuilding")}
+              className="rounded-md border border-indigo-600 px-4 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50"
+            >
+              Pass — end Special Building turn
+            </button>
+          )}
         </div>
       )}
 
-      {game.phase === "main" && buildAllowed && self && (
+      {game.phase === "main" && buildAllowed && !game.specialBuilding && self && (
         <TradePanel
           game={game}
           playerId={playerId}

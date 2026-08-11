@@ -18,6 +18,22 @@ const TurnBanner = ({ game, playerId }: { game: GameState; playerId: string }) =
   const active = game.players.find((p) => p.playerId === activeId);
   const isMe = activeId === playerId;
 
+  // 5-6 player games only (see state.ts's GameState.specialBuilding) — the
+  // active player above has already ended their real turn, and everyone
+  // else takes a build-only mini-turn in order before the next real turn
+  // begins. Checked ahead of turnSubphase since specialBuilding freezes
+  // turnSubphase at "postRoll" throughout, so this needs to take priority.
+  if (game.specialBuilding) {
+    const actingId = game.specialBuilding[0];
+    const acting = game.players.find((p) => p.playerId === actingId);
+    const isMyBuildTurn = actingId === playerId;
+    return (
+      <p className="text-lg font-medium text-indigo-700">
+        Special Building Phase — {isMyBuildTurn ? "your turn to build or buy, then pass" : `waiting on ${acting?.nickname ?? "?"}`}
+      </p>
+    );
+  }
+
   if (game.turnSubphase === "discarding") {
     const owedCount = Object.keys(game.discardsOwed).length;
     return (

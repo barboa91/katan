@@ -104,6 +104,13 @@ export function boardSizeForPlayerCount(playerCount: number): BoardSize {
   return playerCount <= 4 ? "standard" : "expansion";
 }
 
+/** 5-6 player games use the official 5-6 Player Extension's "Special
+ * Building Phase" rule (see rules.ts's advanceTurn/passSpecialBuildingTurn)
+ * — 4-player games never trigger it. */
+export function usesSpecialBuildingPhase(playerCount: number): boolean {
+  return playerCount >= 5;
+}
+
 // Port counts, keyed by board size. The standard board's 9 ports (4
 // generic 3:1 + 1 each of the 5 resources at 2:1) are the well-known
 // official layout. The 5-6 player expansion board adds 2 more harbors on

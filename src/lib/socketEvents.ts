@@ -60,6 +60,11 @@ export interface ClientToServerEvents {
   /** targetId is a vertexId for "settlement"/"city", an edgeId for "road". */
   "game:build": (payload: { type: "settlement" | "road" | "city"; targetId: string }) => void;
   "game:endTurn": () => void;
+  /** Sent by whichever player is at the head of the Special Building Phase
+   * queue (5-6 player games only — see state.ts's GameState.specialBuilding)
+   * once they're done building/buying for their mini-turn. No forced
+   * action — they may pass having built nothing. */
+  "game:passSpecialBuilding": () => void;
   /** Only sent by a player who currently owes a discard (turnSubphase
    * "discarding"); resources must sum to exactly what's owed. */
   "game:discard": (payload: { resources: Partial<Record<Resource, number>> }) => void;
