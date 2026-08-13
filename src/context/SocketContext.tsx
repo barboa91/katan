@@ -12,18 +12,25 @@ import { ClientToServerEvents, ServerToClientEvents } from "@/lib/socketEvents";
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-// In production (self-hosted, Docker/nginx) this is same-origin — nginx
-// proxies the /socket.io path to the socket container (see
-// nginx/default.conf) — so Dockerfile.web's build always sets
-// NEXT_PUBLIC_SOCKET_URL to "" explicitly. The `|| undefined` below is
-// what actually makes that mean same-origin: socket.io-client's io()
-// connects same-origin only when given no URL at all (undefined), not an
-// empty string, and NEXT_PUBLIC_* vars are inlined at Next.js build time
-// so this can't be a runtime container env var. The :4000 fallback only
-// matters for local `npm run dev`, where NEXT_PUBLIC_SOCKET_URL is unset
-// entirely (`??`, not `||`, so that case is untouched) and the Socket.IO
-// server runs as a separate process/port.
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
+// In production (self-hosted, Docker/nginx) this connects same-origin —
+// nginx proxies the /socket.io path to the socket container (see
+// nginx/default.conf) — via socket.io-client's io() called with no URL at
+// all (undefined). This deliberately does NOT use an empty-string
+// NEXT_PUBLIC_SOCKET_URL as the "same origin" signal: confirmed by
+// directly inspecting a built bundle that Next.js silently does NOT
+// inline a NEXT_PUBLIC_* var set to "" the way it inlines a real value —
+// it's left as a genuine (nonexistent) process.env property read in the
+// browser, which evaluates to undefined, which then hits this same
+// fallback anyway — so an explicit "" build arg quietly behaves exactly
+// like never setting the var, defeating the whole point. NODE_ENV sidesteps
+// that: Next.js always inlines it, and `next build` always forces it to
+// "production" (Docker's builder stage runs `npm run build`, no
+// exceptions) — so this only needs an explicit NEXT_PUBLIC_SOCKET_URL
+// override for a genuinely non-same-origin setup; every other production
+// build defaults to same-origin automatically, no build arg required.
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL ||
+  (process.env.NODE_ENV === "production" ? undefined : "http://localhost:4000");
 
 const SocketContext = createContext<{ socket: AppSocket; connected: boolean } | null>(null);
 
@@ -32,7 +39,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [connected, setConnected] = useState(false);
 
   if (!socketRef.current) {
-    socketRef.current = io(SOCKET_URL || undefined);
+    socketRef.current = io(SOCKET_URL);
   }
 
   useEffect(() => {

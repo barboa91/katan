@@ -13,11 +13,14 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Same-origin Socket.IO connection through nginx in production (see
-# src/context/SocketContext.tsx) — NEXT_PUBLIC_* vars are inlined into the
-# client bundle at build time, not read at container runtime, so this has
-# to be a build ARG rather than a docker-compose environment: entry.
-ARG NEXT_PUBLIC_SOCKET_URL=""
+# No NEXT_PUBLIC_SOCKET_URL build arg needed for the normal case: `next
+# build` always forces NODE_ENV=production, and SocketContext.tsx uses
+# that (not an env var) to default to a same-origin connection through
+# nginx — see its comment for why an empty-string build arg doesn't work
+# for this (Next.js doesn't inline NEXT_PUBLIC_* vars set to ""). This ARG
+# only exists as an escape hatch for a genuinely non-same-origin
+# deployment: `docker build --build-arg NEXT_PUBLIC_SOCKET_URL=<real-url>`.
+ARG NEXT_PUBLIC_SOCKET_URL
 ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
 RUN npm run build
 

@@ -5,14 +5,13 @@
 # file — real domain/TLS decisions belong to the deploy step, not here.
 services:
   web:
+    # No build args: the image defaults to a same-origin Socket.IO
+    # connection through nginx automatically (see
+    # src/context/SocketContext.tsx and Dockerfile.web's comments) — no
+    # NEXT_PUBLIC_SOCKET_URL needed for the normal case.
     build:
       context: .
       dockerfile: Dockerfile.web
-      args:
-        # Empty on purpose: same-origin through nginx (see
-        # src/context/SocketContext.tsx). Baked in at build time since
-        # NEXT_PUBLIC_* vars are inlined into the client bundle.
-        NEXT_PUBLIC_SOCKET_URL: ""
     restart: unless-stopped
 
   socket:
